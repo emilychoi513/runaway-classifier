@@ -1,0 +1,7 @@
+# 개발·검증에 쓴 버전 (Python 3.10.12)
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-learn==1.7.2
+pillow==12.3.0
+catboost==1.2.10
