@@ -1,7 +1,7 @@
 # Uni-D 배터리 열폭주 6단계 분류 — 2팀 제출 코드
 
 - 팀명: 2팀
-- 최종 선택 제출 파일: 리더보드에 올린 `submission_stage10_min4.csv` (Public 0.9723). 이 레포의 `submission.csv`가 같은 파일이고, `test.py`로 그대로 다시 만들 수 있습니다.
+- 최종 선택 제출 파일: `submission.csv` (Public 0.9723). `test.py`로 그대로 다시 만들 수 있습니다.
 
 ## 코드 실행 방법
 ```bash
@@ -35,7 +35,7 @@ python check_submission.py --data_dir <battery_data_light> --final submission.cs
 | `src/temp_sum_features.py` | 온도 합 최고점 피처 (모델 C) |
 | `src/rules.py` | 예측 뒤에 적용하는 규칙 |
 | `check_submission.py` | 대회 제공 점검 스크립트 (수정 없음) |
-| `submission.csv` | 최종 선택 제출 파일 (리더보드 파일명 `submission_stage10_min4.csv`) |
+| `submission.csv` | 최종 선택 제출 파일 |
 
 ## 개발 환경
 - OS: Ubuntu 22.04.5 LTS
