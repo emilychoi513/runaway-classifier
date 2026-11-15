@@ -1,79 +1,68 @@
 # Uni-D 배터리 열폭주 6단계 분류 — 2팀 제출 코드
 
-## 팀 정보
 - 팀명: 2팀
-- 최종 선택 제출 파일: `submission_stage10_min4.csv` (Public 0.9723), Private 복원 대상
-- 이전 제출 `submission_stage8_peak_guard_trainval.csv`(Public 0.9645)는 4단계 최소 지속 제약만 뺀 버전입니다. `weights/meta.json`의 `use_stage4_min`을 `false`로 바꾸면 재현됩니다.
-- 그 이전 제출 `submission_stage6_rules_trainval.csv`(Public 0.9555)는 거기서 6단계 제약도 뺀 버전입니다(`use_peak_guard`도 `false`).
+- 최종 선택 제출 파일: 리더보드에 올린 `submission_stage10_min4.csv` (Public 0.9723). 이 레포의 `submission.csv`가 같은 파일이고, `test.py`로 그대로 다시 만들 수 있습니다.
+
+## 코드 실행 방법
+```bash
+pip install -r requirements.txt
+
+# 추론: 저장된 가중치(weights/)로 제출 파일을 다시 만듭니다
+python test.py --input <battery_data_light>/test/test.csv --image_root <battery_data_light>/test --output submission.csv
+
+# 학습: 제출 가중치를 다시 만듭니다 (Train+Validation → weights/, CPU로 2분 안팎)
+python train.py --data_dir <battery_data_light>
+
+# 검증: Train만 학습하고 Validation 점수를 출력합니다 (weights_train/ 에 저장)
+python train.py --data_dir <battery_data_light> --train_only
+
+# 제출 전 점검 (대회 제공 스크립트)
+python check_submission.py --data_dir <battery_data_light> --final submission.csv
+```
+- `--image_root`에는 `images/` 폴더의 상위 폴더(`test`)를 줍니다. 이미지 폴더 자체(`test/images`)를 줘도 결과가 같습니다.
+- 출력 행 순서는 입력 CSV 순서입니다. `--sample_submission <battery_data_light>/sample_submission.csv`를 주면 제출 양식 순서로 저장합니다.
+- 시드를 고정했고 CPU로만 학습하므로, 다시 학습한 가중치로도 같은 예측이 나옵니다. 모델 파일의 바이트는 저장할 때마다 달라집니다.
+
+| 파일 | 역할 |
+|---|---|
+| `model.py` | 피처 표 구성, 모델 설정, 확률 결합, 추론 함수 |
+| `train.py` | 학습하고 가중치를 `weights/`에 저장 |
+| `test.py` | 가중치를 불러와 예측하고 CSV 저장 |
+| `weights/` | CatBoost 모델 9개와 설정(`meta.json`) |
+| `src/sensor_features.py` | 표 피처: 센서·조건·가스 값과 과거 방향 피처 |
+| `src/image_features.py` | 열화상 이미지 피처 |
+| `src/pressure_features.py` | 압력 변곡점 피처 (모델 B) |
+| `src/temp_sum_features.py` | 온도 합 최고점 피처 (모델 C) |
+| `src/rules.py` | 예측 뒤에 적용하는 규칙 |
+| `check_submission.py` | 대회 제공 점검 스크립트 (수정 없음) |
+| `submission.csv` | 최종 선택 제출 파일 (리더보드 파일명 `submission_stage10_min4.csv`) |
 
 ## 개발 환경
 - OS: Ubuntu 22.04.5 LTS
 - Python: 3.10.12
-- GPU: 대회 제공 GPU 서버 (NVIDIA GeForce RTX 5080). 학습과 추론은 CPU만 씁니다.
-- 라이브러리: `requirements.txt` 참고
+- GPU: 대회 제공 서버의 NVIDIA GeForce RTX 5080. 학습과 추론은 CPU만 씁니다.
+- 라이브러리: catboost 1.2.10, numpy 2.2.6, pandas 2.3.3, scikit-learn 1.7.2, scipy 1.15.3, pillow 12.3.0 (`requirements.txt`)
 
-## 파일 구성
-| 파일 | 역할 |
-|---|---|
-| `model.py` | 피처 표 구성, 모델 설정, 확률 결합, 추론 함수. `train.py`와 `test.py`가 함께 씁니다 |
-| `train.py` | 제출 가중치 학습(Train+Validation → `weights/`). `--train_only`를 주면 Train만 학습하고 Validation으로 평가(`weights_train/`에 저장) |
-| `test.py` | 입력 CSV에 들어 있는 행만으로 추론하고 제출 파일 생성 |
-| `weights/` | 학습된 가중치(CatBoost 모델 9개)와 `meta.json`. 재학습 없이 `test.py`만으로 결과를 재현합니다 |
-| `src/sensor_features.py` | 표 피처: 센서·조건·가스 값과 과거 방향 피처 |
-| `src/image_features.py` | 열화상 이미지 피처 (색을 온도 수준으로 바꾼 통계) |
-| `src/pressure_features.py` | 압력 변곡점 피처 48개 (2↔3단계 구분용, 모델 B) |
-| `src/temp_sum_features.py` | 온도 합(`meas_t1 + meas_t2`) 최고점 피처 15개 (5↔6단계 구분용, 모델 C) |
-| `src/rules.py` | 예측 뒤에 적용하는 단계 기준 규칙 2개, 6단계 제약, 4단계 최소 지속 제약 |
-| `check_submission.py` | 대회 템플릿의 제출 전 점검 스크립트 (수정 없음) |
-| `submission_stage10_min4.csv` | 최종 선택 제출 파일 |
-| `submission_stage8_peak_guard_trainval.csv` | 이전 제출 파일 (Public 0.9645). 비교용 |
-
-## 실행 방법
-```bash
-pip install -r requirements.txt
-
-# 추론 (제출 파일 재현). 가중치는 weights/ 를 씁니다
-python test.py --input <battery_data_light 경로>/test/test.csv \
-               --image_root <battery_data_light 경로>/test \
-               --output submission.csv
-
-# 학습: 제출 가중치 재현 (Train+Validation 학습 → weights/ 에 저장. CPU로 2분 안팎)
-python train.py --data_dir <battery_data_light 경로>
-
-# 검증: Train만 학습하고 Validation 점수 확인 (weights_train/ 에 저장. 제출 가중치는 그대로 둠)
-python train.py --data_dir <battery_data_light 경로> --train_only
-
-# 제출 전 점검
-python check_submission.py --data_dir <battery_data_light 경로> --final submission_stage10_min4.csv
-```
-- `--image_root`에는 `test` 폴더(CSV의 `image_path`가 가리키는 `images/` 폴더의 상위 폴더)를 줍니다. `test/images`처럼 이미지 폴더 자체를 줘도 같은 이미지를 찾아 같은 결과가 나옵니다. 이미지를 하나도 찾지 못하면 오류를 냅니다.
-- 출력 행 순서는 입력 CSV 순서입니다. `--sample_submission <battery_data_light 경로>/sample_submission.csv`를 주면 그 양식의 순서로 저장합니다(예측은 같음).
-- `train.py`에 `--cache_dir <폴더>`를 주면 이미지 피처를 저장해 두고 다시 씁니다.
-- 재학습 재현: 위 학습 명령으로 `weights/`를 다시 만든 뒤 `test.py`를 실행하면 최종 선택 파일과 같은 예측이 나옵니다. 시드를 고정했고 CPU로만 학습하므로 스레드 수(`--threads`)를 바꿔도 예측 확률이 같습니다. 모델 파일(`.cbm`)의 바이트와 sha256은 저장할 때마다 달라집니다.
-- `--refit_train_val`은 기본 동작과 같습니다(이전 명령과의 호환용).
-
-## 모델 구조
+## 모델 구성
 | 구성 | 내용 |
 |---|---|
-| A | 6단계 CatBoost (MultiClass, depth 8, 시드 3개 평균). 입력: 표 피처 41개 + 이미지 피처 4개 |
-| B | 2↔3단계 전용 CatBoost (2·3단계 행만으로 학습, depth 6, 트리 300, 시드 3개). 입력: 표 피처 41개 + 압력 변곡점 피처 48개 |
-| C | 5↔6단계 전용 CatBoost (5·6단계 행만으로 학습, depth 6, 트리 300, 시드 3개). 입력: 표 피처 41개 + 온도 합 피처 15개 |
-| 결합 | 1·4단계 확률은 A 그대로. A의 (2+3단계) 확률 합을 B의 비율로, (5+6단계) 확률 합을 C의 비율로 나눈 뒤 확률이 가장 높은 단계를 고름 |
-| 규칙 | 결합한 예측에 아래 두 규칙, 6단계 제약, 4단계 최소 지속 제약을 차례로 적용 |
+| A | 6단계 CatBoost (depth 8, 시드 3개 평균). 입력: 표 피처 41개 + 이미지 피처 4개 |
+| B | 2↔3단계 전용 CatBoost (2·3단계 행만으로 학습). 입력: 표 피처 41개 + 압력 변곡점 피처 48개 |
+| C | 5↔6단계 전용 CatBoost (5·6단계 행만으로 학습). 입력: 표 피처 41개 + 온도 합 피처 15개 |
+| 결합 | A의 (2+3단계) 확률 합을 B의 비율로, (5+6단계) 확률 합을 C의 비율로 나눈 뒤 확률이 가장 높은 단계를 고름 |
+| 규칙 | 결합한 예측에 아래 네 가지를 차례로 적용 (`src/rules.py`) |
 
-규칙 (`src/rules.py`). 모두 현재 행과 이전 행만 보고, 학습하는 값이 없습니다.
-1. **전압 급락이 있었으면 4단계 이상** (모든 실험). 급락은 `meas_t1`이 50℃를 넘은 뒤 한 행 사이에 `meas_v`가 처음 전압의 21% 이상 떨어지는 것입니다. 모델이 3단계 이하로 본 행만 올립니다.
-2. **온도 급상승 전에는 5단계가 아니고, 급상승 뒤에는 4단계가 아님** (280Ah 과충전: `bat_cc` 280, `tr_method` 2). 급상승은 전압이 이미 낮아진 상태에서 `meas_t1`이 초당 1℃ 이상 오르는 것입니다.
-3. **6단계 제약: 온도 합이 아직 최고치를 갱신하는 중이면 6단계가 아님** (모든 실험). 이번 행의 `meas_t1 + meas_t2`가 같은 실험 이전 행들의 최댓값 이상이면, 모델이 6단계로 본 행을 5단계로 내립니다. 다른 단계는 건드리지 않습니다. 6단계 시작은 온도 합의 최고점과 93개 실험 중 88개가 1행 이내로 일치하므로, 아직 오르는 중인 행은 대부분 최고점 전(5단계)입니다.
-4. **4단계 최소 지속 제약: 4단계가 시작된 지 25초가 안 됐으면 5·6단계가 아님** (소형 전지: `bat_cc`가 6Ah 이하, 즉 4.8Ah·6Ah). 같은 실험에서 예측이 처음 4단계 이상이 된 행부터 25초가 지나지 않은 행은, 모델이 5·6단계로 봐도 4단계로 둡니다. 라벨이 있는 소형 전지 실험 31개 모두 4단계가 30초 이상 이어졌고(최솟값 30초), 4단계 시작 직후 전압이 0.5V 아래로 무너진 실험 6개에서도 30~110초였습니다. 기준은 최솟값보다 한 행(5초) 짧게 잡았습니다. 4단계 시작 직후 전압이 바로 무너지면 모델이 낮은 전압만 보고 5단계를 너무 일찍 선언하는 경우를 막습니다. 다른 전지(39·73Ah는 4단계가 0~20초, 280Ah는 실험마다 다름)에는 적용하지 않습니다. 이 제약을 찾은 경위는 아래 "학습·검증 구성"에 적었습니다.
+규칙은 모두 현재 행과 이전 행만 보고, 학습하는 값이 없습니다.
+1. **전압 급락이 있었으면 4단계 이상** (모든 실험). 급락은 `meas_t1`이 50℃를 넘은 뒤 한 행 사이에 `meas_v`가 처음 전압의 21% 이상 떨어지는 것입니다.
+2. **온도 급상승 전에는 5단계가 아니고, 급상승 뒤에는 4단계가 아님** (280Ah 과충전). 급상승은 전압이 이미 낮아진 상태에서 `meas_t1`이 초당 1℃ 이상 오르는 것입니다.
+3. **6단계 제약** (모든 실험). `meas_t1 + meas_t2`가 아직 최고치를 갱신하는 중이면 6단계 예측을 5단계로 내립니다.
+4. **4단계 최소 지속 제약** (6Ah 이하 전지). 4단계가 시작된 지 25초가 안 된 행은 5·6단계 예측을 4단계로 내립니다.
 
-## 학습·검증 구성
-- 학습 데이터: Train + Validation. Validation 실험 `E_e5bcddc7` 하나는 넣지 않았습니다. 전압이 0이 되자마자 4단계 없이 5단계가 2,950초 이어지는 실험으로, 용량이 같은 다른 실험들의 4·5단계 기준과 어긋납니다.
-- 간격 증강: 원본(5초 간격)에 더해, 모든 실험을 평균 12초 간격(10·15초)으로 솎은 복사본을 함께 학습했습니다. Test 일부 실험의 관측 간격이 넓기 때문입니다.
-- 검증 방법: (1) 제공 Validation — Train만 학습한 같은 구성의 모델로 채점, (2) Train+Validation 97개 실험의 실험 단위 5-fold.
-- 변경을 채택한 기준: 5-fold와 Validation에서 내려가지 않고 한쪽 이상에서 오르며, 실험 단위로 나빠진 실험보다 좋아진 실험이 많을 것. 최종 구성에 들어간 규칙 1·2, 6단계 제약, 4단계 최소 지속 제약은 모두 이 기준을 통과한 뒤 리더보드에 제출했고, Public 점수가 오른 것을 확인한 뒤 최종 구성에 넣었습니다.
-- 4단계 최소 지속 제약을 찾은 경위: Test에 대한 모델의 예측을 살펴보다가, 4.8Ah 실험에서 4단계가 라벨이 있는 실험들보다 유난히 짧게 예측된 것을 보고 점검을 시작했습니다. 이 점검은 Public과 Private 양쪽 점수에 영향이 있는 변경을 찾는 과정에서 했고, 그때 그동안의 리더보드 점수 변화로 어떤 실험이 Public에 들어 있는지 추정해 참고했습니다. 규칙의 기준(소형 전지, 25초)은 그 뒤 Train·Validation 라벨 통계로 정했고 위 채택 기준으로 검증했습니다. Test 정답은 보지 않았고, Test로 학습하거나 기준값을 Test에 맞추지 않았습니다.
-- 규칙·제약의 기준값(전압 급락 21%, 초당 1℃, 25초 등)은 Train+Validation 분석으로 정했습니다. 따라서 아래 Validation 점수는 모델 가중치에 대해서는 학습에 쓰지 않은 데이터의 점수이지만, 이 기준값들에 대해서는 완전히 독립된 점수가 아닙니다.
+## 학습·검증 데이터 구성
+- 학습: Train + Validation으로 제출 가중치를 학습했습니다. Validation 실험 1개(`E_e5bcddc7`)는 4단계 없이 5단계가 길게 이어져 다른 실험들의 기준과 어긋나므로 넣지 않았습니다.
+- 간격 증강: 모든 실험을 평균 12초 간격(10·15초)으로 솎은 복사본을 원본(5초 간격)과 함께 학습했습니다. Test 일부 실험의 관측 간격이 넓기 때문입니다.
+- 검증: (1) Train만 학습한 같은 구성의 모델로 제공 Validation을 채점, (2) Train+Validation 97개 실험의 실험 단위 5-fold. 두 방법 모두 채점하는 실험을 학습에 쓰지 않습니다.
+- Test는 학습에 쓰지 않았습니다.
 
 | 검증 점수 (Macro F1) | A만 | A + B + C | + 규칙 1·2 | + 6단계 제약 | + 4단계 최소 지속 제약 (최종) |
 |---|---|---|---|---|---|
@@ -81,20 +70,11 @@ python check_submission.py --data_dir <battery_data_light 경로> --final submis
 | Train만 학습 → Validation, `E_e5bcddc7` 제외 | 0.9110 | 0.9305 | 0.9320 | 0.9349 | 0.9349 |
 | 97개 실험 5-fold, Test와 같은 조건 구성으로 채점 | — | 0.9288 | 0.9338 | 0.9343 | 0.9350 |
 
-Validation 두 행은 `python train.py --train_only`가 출력하는 값입니다. 5-fold 행은 이 폴더의 피처·모델 코드를 불러 쓰는 별도 분석 스크립트로 A·B·C를 fold마다 다시 학습해 낸 값입니다. 그 스크립트는 실험 단위 fold 배정 파일이 필요해 레포에 넣지 않았습니다(이전 README의 5-fold 값 0.9369는 A의 fold 밖 예측을 다른 설정으로 만든 값이라 같은 줄에 놓고 비교할 수 없습니다).
-
-6단계 제약 검증: 5-fold에서 기반 모델 4가지 모두 +0.0006, 바뀐 42행 중 28행이 맞게 바뀜(모두 6 → 5단계), 좋아진 실험 13개·나빠진 실험 7개(각 1~2행),
-fold 5개 모두 0 이상. Validation에서는 바뀐 8행 중 7행이 맞음. 이전 최댓값에 0.5℃ 이상 여유를 두면 더 나빠져서 여유 없이 씁니다.
-
-4단계 최소 지속 제약 검증 (모두 제약을 넣기 전 구성과의 비교):
-- 라벨 통계: 소형 전지(4.8Ah 18개, 6Ah 13개) 실험 31개 모두 4단계가 30초 이상 이어짐. 한 실험을 빼고 나머지로 최솟값을 다시 구해도(leave-one-out) 4.8Ah는 30초로 같음.
-- 5-fold: 모의 점수 +0.0007, 전체 +0.0005. 바뀐 7행(모두 5 → 4단계)이 모두 맞게 바뀜. 좋아진 실험 2개·나빠진 실험 0개.
-- 시드를 바꾸고 솎은 입력으로 바꿔도 같음: 시드 묶음 3개 × (5초 간격, 솎은 입력) 합계에서 바뀐 42행이 모두 맞게 바뀜.
-- Train만 학습 → Validation: 바뀌는 행이 없어 점수가 그대로입니다(Validation의 소형 전지 실험에서는 모델이 이 실수를 하지 않음). 그래서 이 제약의 근거는 5-fold와 라벨 통계입니다.
-- 기준 시간을 20·25·30초로 바꿔도 틀리게 바뀌는 행이 없고, 40초부터는 틀리는 행이 생깁니다(4단계가 30초인 실험이 있기 때문). 25초는 관측된 최솟값보다 한 행 짧은 값입니다.
-- 같은 방식의 '최소 지속 시간'을 다른 전지와 2·3·5단계에도 시험했지만 leave-one-out에서 틀리게 바뀌는 행이 더 많아 넣지 않았습니다.
-
-Validation 전체 점수가 낮은 것은 `E_e5bcddc7`(1,543행) 하나에서 오류가 대부분 나오기 때문입니다.
+- Validation 두 행은 `python train.py --train_only`가 출력하는 값입니다. 5-fold 행은 이 레포의 피처·모델 코드를 불러 쓰는 별도 분석 스크립트로 계산했고, 그 스크립트는 레포에 넣지 않았습니다.
+- Validation 전체 점수가 낮은 것은 학습에서 뺀 실험 `E_e5bcddc7`(1,543행)에서 오류가 대부분 나오기 때문입니다.
+- 규칙의 기준값은 Train+Validation 분석으로 정했으므로, 위 Validation 점수는 기준값에 대해서는 완전히 독립된 점수가 아닙니다.
+- 규칙은 모두 위 검증에서 점수가 내려가지 않는 것을 확인한 뒤 리더보드에 제출했고, Public 점수가 오른 것을 확인한 뒤 최종 구성에 넣었습니다.
+- 4단계 최소 지속 제약을 찾은 경위: Test에 대한 모델의 예측에서 4.8Ah 실험의 4단계가 유난히 짧게 나온 것을 보고 점검을 시작했습니다. Public과 Private 양쪽 점수에 영향이 있는 변경을 찾던 중이었고, 그때 리더보드 점수 변화로 어떤 실험이 Public에 들어 있는지 추정해 참고했습니다. 기준(6Ah 이하 전지, 25초)은 Train·Validation 라벨 통계(해당 전지 실험 31개 모두 4단계가 30초 이상)로 정했습니다. Test 정답은 보지 않았습니다.
 
 ## 시계열 피처 구성
 모두 같은 `experiment_id` 안에서 `relative_time_s`가 현재 이하인 관측만 씁니다. 창 길이는 행 수가 아니라 초 단위입니다.
@@ -110,25 +90,9 @@ Validation 전체 점수가 낮은 것은 `E_e5bcddc7`(1,543행) 하나에서 �
 입력 데이터로 추정하는 전처리(표준화, 결측 대체)는 없습니다. 결측은 그대로 CatBoost에 넘깁니다.
 
 ## 사용한 사전학습 모델
-- 없음
+없습니다. 모든 모델(CatBoost)은 대회 제공 데이터로 처음부터 학습했습니다. 따라서 적을 출처·버전·라이선스가 없습니다.
 
-## 규정 준수·재현 확인 (이 폴더, 2026-11-15)
-| 확인 | 결과 |
-|---|---|
-| `check_submission.py --final submission_stage10_min4.csv`: 형식, 같은 입력 재실행, 최종 파일 재현, 행 순서 섞기, 실험 나눠 넣기, 미래 행 빼고 넣기 | 모두 통과 (다른 예측 0행) |
-| `check_submission.py`: 모든 이미지를 검은 이미지로 교체 | 예측이 바뀜 (3,451행 중 0.55%) |
-| 새로 받은 레포에서 `python train.py --data_dir …`로 다시 학습한 뒤 `test.py` 실행 (이미지 캐시 없이, 스레드 6·16) | 최종 선택 파일과 바이트 단위로 동일. 예측 확률도 저장된 가중치와 완전히 같음 |
-| 미래 행 빼고 넣기를 앞 15·35·80·97%로 바꿔 실행, 실험을 하나씩 따로 실행 | 다른 예측 0행 |
-| 빈 이미지를 흰색·회색·다른 크기·흑백 모드로 바꿔 실행 | 모두 예측이 바뀜 (3,451행 중 0.23~0.55%) |
-| `--image_root`에 `test` / `test/images`를 줌 | 두 경우 모두 최종 선택 파일과 바이트 단위로 동일 |
-| `--image_root`에 이미지가 없는 폴더를 줌 | 예측하지 않고 오류를 냄 (이미지 피처가 빈 값인 채로 조용히 예측하지 않음) |
-| `weights/meta.json`의 `use_stage4_min`을 `false`로 바꾸고 `test.py` 실행 | `submission_stage8_peak_guard_trainval.csv`(0.9645)와 바이트 단위로 동일 |
-| 0.9645 제출 파일과 비교 | 4행만 다름, 모두 5 → 4단계 (4.8Ah 실험 2개) |
-
-가중치는 0.9555·0.9645 제출 때와 같은 파일입니다(sha256 동일). 규칙과 제약은 학습하는 값이 없어, 가중치를 다시 학습해도 위 표처럼 같은 예측이 나옵니다.
-
-## 참고: 규칙 켜고 끄기 (`weights/meta.json`)
-- `"use_stage4_min": false` → 4단계 최소 지속 제약을 끕니다. 출력이 0.9645 제출 파일과 같아집니다.
-- 거기에 `"use_peak_guard": false` → 6단계 제약도 끕니다. 출력이 0.9555 제출 파일과 같아집니다.
-- `"use_rule1": false` → 규칙 1을 끕니다.
-- 이 폴더의 제출 파일을 재현하려면 셋 다 `true`로 두어야 합니다.
+## 재현 확인
+- `check_submission.py`의 점검 7개를 모두 통과했습니다. 모든 이미지를 검은 이미지로 바꾸면 3,451행 중 0.55%의 예측이 바뀝니다.
+- 새로 받은 레포에서 `train.py`로 다시 학습한 뒤 `test.py`를 실행해도 `submission.csv`와 바이트 단위로 같은 파일이 나옵니다.
+- `weights/meta.json`의 `use_rule1`, `use_peak_guard`, `use_stage4_min`으로 규칙 1, 6단계 제약, 4단계 최소 지속 제약을 끌 수 있습니다. 제출 파일을 재현하려면 셋 다 `true`로 둡니다.
