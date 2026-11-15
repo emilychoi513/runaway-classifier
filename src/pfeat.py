@@ -9,15 +9,19 @@ meas_t1이 50℃에 닿는 시점에 3단계가 시작된다. 이 파일은 그 
 - 창 길이는 모두 초 단위(relative_time_s 기준)라서 관측 간격이 달라도 같은 의미다.
 - 학습하는 값이 없다(고정 계산식). 입력 행 순서와 무관하게 같은 값이 나온다.
 """
-import numpy as np, pandas as pd
+import numpy as np
+import pandas as pd
+
 
 def _lag(t, x, s):
+    """각 행에 대해 시각이 (t - s) 이하인 행 중 가장 최근 행의 x. 없으면 NaN. t는 오름차순."""
     j = np.searchsorted(t, t - s, side='right') - 1
     out = np.full(len(t), np.nan); ok = j >= 0; out[ok] = x[j[ok]]; return out
 
+
 def _trail_fit(t, x, W, G, min_n=4):
     """각 행 i: 시각이 [t_i-W, t_i-G]인 과거 행으로 직선을 맞춰 t_i로 연장한 값, 잔차 표준편차, 평균."""
-    n = len(t); c = np.r_[0.0, np.cumsum(np.ones(n))]
+    n = len(t)
     S = lambda a: np.r_[0.0, np.cumsum(a)]
     St, Sx, Stt, Stx, Sxx = S(t), S(x), S(t * t), S(t * x), S(x * x)
     lo = np.searchsorted(t, t - W, side='left'); hi = np.searchsorted(t, t - G, side='right')
@@ -40,12 +44,16 @@ def _trail_fit(t, x, W, G, min_n=4):
     sd[g2] = np.sqrt(np.maximum(sse[g2], 0) / (k[g2] - 2))
     return pred, sd, mean, slope
 
+
 def _since_first(t, cond):
+    """cond가 처음 참이 된 시각부터 지난 초. 그 전 행은 NaN."""
     out = np.full(len(t), np.nan); h = np.flatnonzero(cond)
     if len(h): out[h[0]:] = t[h[0]:] - t[h[0]]
     return out
 
+
 def _one(t, p, t1):
+    """한 실험(시간순)의 압력 피처. t: 시각(초), p: meas_p, t1: meas_t1."""
     n = len(t); F = {}
     reached45 = np.fmax.accumulate(t1) >= 45.0; reached50 = np.fmax.accumulate(t1) >= 50.0
     i45 = np.flatnonzero(reached45); i50 = np.flatnonzero(reached50)
@@ -89,7 +97,9 @@ def _one(t, p, t1):
     F['past_s_since_t1_50'] = _since_first(t, reached50)
     return F
 
+
 def p_features(frame: pd.DataFrame) -> pd.DataFrame:
+    """압력 피처 표. 실험별로 시간순 정렬해 계산하고 입력 행 순서로 돌려준다."""
     n = len(frame)
     t_all = pd.to_numeric(frame['relative_time_s'], errors='coerce').to_numpy(float)
     p_all = pd.to_numeric(frame['meas_p'], errors='coerce').to_numpy(float)
@@ -105,4 +115,6 @@ def p_features(frame: pd.DataFrame) -> pd.DataFrame:
         for k, v in F.items(): out[k][idx] = v
     return pd.DataFrame(out, index=frame.index)
 
+
+# 피처 이름 목록. 작은 가짜 입력으로 한 번 계산해 얻는다
 P_COLS = list(p_features(pd.DataFrame({"experiment_id": ["e"] * 3, "relative_time_s": [0, 5, 10], "meas_p": [1.0, 1.0, 1.0], "meas_t1": [20.0, 20.0, 20.0]})).columns)

@@ -56,9 +56,8 @@ IP_COLS = [
     'past_img_white_frac_cummax',
     'past_img_border_level_cummax', 'past_img_border_level_change_30s',
 ]
-IC_COLS = ['img_level_mean', 'img_frac_hot', 'past_img_level_mean_cummax', 'past_img_hot_frac_cummax']   # 미리 정한 최소 구성
-
-FT.GROUPS.update({'IR': IR_COLS, 'IP': IP_COLS, 'IC': IC_COLS})
+# 모델 A가 쓰는 이미지 피처 4개. 나머지 IR·IP 피처는 계산만 하고 모델에 넣지 않는다
+IC_COLS = ['img_level_mean', 'img_frac_hot', 'past_img_level_mean_cummax', 'past_img_hot_frac_cummax']
 
 
 def level_map(rgb: np.ndarray) -> np.ndarray:
@@ -138,7 +137,7 @@ def resolve_image_paths(image_root, image_paths) -> list[str]:
 
 
 def row_table(frame: pd.DataFrame, image_root, cache_file=None, workers: int = 8) -> pd.DataFrame:
-    """IR 피처 표. 행 순서는 입력과 같다. cache_file이 있으면 sample_id가 같을 때 그대로 읽는다(학습·실험용)."""
+    """IR 피처 표. 행 순서는 입력과 같다. cache_file이 있으면 sample_id가 같을 때 그대로 읽는다(학습용. test.py는 cache_file을 주지 않는다)."""
     sid = frame['sample_id'].to_numpy(str)
     if cache_file is not None and Path(cache_file).exists():
         z = np.load(cache_file, allow_pickle=False)

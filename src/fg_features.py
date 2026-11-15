@@ -1,4 +1,7 @@
-"""F·G 단계 피처: 추가 컬럼(F)과 과거 방향 피처(G).
+"""기본 표 피처: 현재 행 값(F)과 과거 방향 피처(G).
+
+이름의 F는 행 하나로 만드는 피처, G는 같은 실험의 과거 행까지 써서 만드는 피처를 뜻한다.
+센서별 추가 피처는 features.py에 있고, 최종 모델이 실제로 쓰는 컬럼은 model.py의 BASE41에 적혀 있다.
 
 규칙
 - F 피처는 행 하나의 값만 쓴다.
@@ -13,15 +16,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-# D2가 쓰는 센서 5개 (팀 기준 구성과 같은 순서)
+# 센서 5개. 과거 방향 피처의 재료로 쓰고, 원값 그대로는 최종 모델 입력(model.py의 BASE41)에 넣지 않는다
 BASE = ['meas_v', 'meas_a', 'meas_t1', 'meas_t2', 'meas_p']
 
 # F1: 조건·온도 컬럼 (현재 행 값 그대로, 숫자로 넣음)
 F1_COLS = ['bat_class', 'bat_cc', 'soc_status', 'tr_method', 'thermal_t', 'atmp_t']
 
-# F2: 가스 10종 + "10종 모두 0" 표시
+# F2: 가스 10종. "10종 모두 0" 표시(gas_all_zero)는 row_features에서 만든다
 GAS = ['meas_ch4', 'meas_co', 'meas_co2', 'meas_hcn', 'meas_hcl', 'meas_hf', 'meas_n2o', 'meas_no', 'meas_no2', 'meas_so2']
-F2_COLS = GAS + ['gas_all_zero']
 
 # G1: 과거 방향 피처 6개
 G1_COLS = [
@@ -49,11 +51,9 @@ G3_COLS = [
 T1_EVENT_C = 45.0
 V_DROP_EVENT_V = -0.77
 
-# 계속 제외하는 컬럼 (모델 입력 금지)
+# 모델 입력으로 쓰지 않는 컬럼
 FORBIDDEN = {'sample_id', 'experiment_id', 'relative_time_s', 'image_path', 'image_file', 'label',
              'indu_t', 'indu_t.1', 'meas_t1_plus_t2'}
-
-GROUPS = {'base': BASE, 'F1': F1_COLS, 'F2': F2_COLS, 'G1': G1_COLS, 'G2': G2_COLS, 'G3': G3_COLS}
 
 
 def to_num(frame: pd.DataFrame, cols: list[str]) -> np.ndarray:
@@ -140,16 +140,9 @@ def feature_table(frame: pd.DataFrame) -> pd.DataFrame:
     return table
 
 
-def columns_for(groups: list[str]) -> list[str]:
-    cols: list[str] = []
-    for g in groups:
-        cols += GROUPS[g]
-    assert len(cols) == len(set(cols)) and not (set(cols) & FORBIDDEN)
-    return cols
-
-
 # ---------------------------------------------------------------------------
 # 자체 점검: 미래 미사용, 행 순서 무관
+# (학습·추론 경로에서는 부르지 않는다. 피처 계산식을 고친 뒤 직접 불러 확인하는 용도)
 # ---------------------------------------------------------------------------
 def _same(a: pd.DataFrame, b: pd.DataFrame) -> bool:
     return bool(np.array_equal(a.to_numpy(), b.to_numpy(), equal_nan=True))

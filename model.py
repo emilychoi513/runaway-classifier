@@ -30,7 +30,7 @@ from sklearn.metrics import f1_score
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'src'))
 
-import features as FT  # noqa: E402,F401  표 피처 (센서·조건·가스·과거 방향)
+import features as FT  # noqa: E402  표 피처 (센서·조건·가스·과거 방향)
 import image_features as IM  # noqa: E402  열화상 이미지 피처
 import pfeat  # noqa: E402  압력 변곡점 피처
 import rules  # noqa: E402  단계 기준 규칙
@@ -84,6 +84,7 @@ def build_table(frame: pd.DataFrame, image_root, cache_file=None) -> pd.DataFram
 
 
 def _keep_index(n: int) -> np.ndarray:
+    """[학습 전용] n행짜리 실험에서 남길 행 번호. 등간격으로 골라 평균 간격이 THIN_AVG_GAP_S초가 되게 한다."""
     m = int(np.floor((n - 1) * THIN_STEP_S / THIN_AVG_GAP_S)) + 1
     return np.floor(np.linspace(0, n - 1, m)).astype(int)
 
@@ -104,6 +105,7 @@ def thin_table(thin: pd.DataFrame, orig: pd.DataFrame, orig_table: pd.DataFrame)
 
 
 def to32(table: pd.DataFrame, cols: list[str]) -> np.ndarray:
+    """피처 표에서 cols를 골라 모델 입력 행렬(float32)로 만든다."""
     return table[cols].to_numpy(dtype=np.float64).astype(np.float32)
 
 
@@ -123,6 +125,7 @@ def compose(prob_a: np.ndarray, r3: np.ndarray, r6: np.ndarray) -> np.ndarray:
 
 
 def load_meta(model_dir) -> dict:
+    """가중치 폴더의 meta.json(피처 구성, 규칙 스위치, 모델 파일 목록)."""
     return json.loads((Path(model_dir) / 'meta.json').read_text())
 
 
@@ -157,4 +160,5 @@ def predict(frame: pd.DataFrame, image_root, model_dir, threads: int = 4) -> np.
 
 
 def macro_f1(y, pred) -> float:
+    """6개 단계 F1의 평균(대회 지표)."""
     return float(f1_score(y, pred, labels=LABELS, average='macro', zero_division=0))

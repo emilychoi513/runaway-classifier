@@ -13,12 +13,14 @@ import pandas as pd
 
 
 def _lag(t, x, s):
+    """각 행에 대해 시각이 (t - s) 이하인 행 중 가장 최근 행의 x. 없으면 NaN. t는 오름차순."""
     j = np.searchsorted(t, t - s, side='right') - 1
     out = np.full(len(t), np.nan); ok = j >= 0; out[ok] = x[j[ok]]
     return out
 
 
 def _one(t, s):
+    """한 실험(시간순)의 온도 합 피처. t: 시각(초), s: meas_t1 + meas_t2."""
     n = len(t); F = {}
     cm = np.fmax.accumulate(s)
     F['past_sum'] = s
@@ -44,6 +46,7 @@ def _one(t, s):
 
 
 def s_features(frame: pd.DataFrame) -> pd.DataFrame:
+    """온도 합 피처 표. 실험별로 시간순 정렬해 계산하고 입력 행 순서로 돌려준다."""
     n = len(frame)
     num = lambda c: pd.to_numeric(frame[c], errors='coerce').to_numpy(float)  # noqa: E731
     t_all = num('relative_time_s'); s_all = num('meas_t1') + num('meas_t2')
@@ -60,4 +63,5 @@ def s_features(frame: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out, index=frame.index)
 
 
+# 피처 이름 목록. 작은 가짜 입력으로 한 번 계산해 얻는다
 S_COLS = list(s_features(pd.DataFrame({'experiment_id': ['e'] * 3, 'relative_time_s': [0, 5, 10], 'meas_t1': [20.0, 21.0, 22.0], 'meas_t2': [20.0, 20.0, 20.0]})).columns)

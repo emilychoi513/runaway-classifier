@@ -1,7 +1,8 @@
-"""2단 CatBoost에 넣는 표 피처와 피처 묶음 이름.
+"""표 피처 전체: 기본 피처(fg_features.py) + 현재 행 파생 변수 + 센서별 과거 방향 피처.
 
-- 기존 피처(센서, 조건·온도, 가스, 과거 방향 피처)는 fg_features.py 를 그대로 쓴다.
-- 새 파생 변수(현재 행 차이·합, 센서별 과거 방향 피처)는 이 파일에서 만든다.
+- 기본 피처(센서, 조건·온도, 가스, 과거 방향 피처 10개)는 fg_features.py 를 그대로 쓴다.
+- 추가 파생 변수(현재 행 차이·합, 센서별 과거 방향 피처)는 이 파일에서 만든다.
+- 여기서 만든 컬럼을 모두 모델에 넣지는 않는다. 최종 모델이 쓰는 41개는 model.py의 BASE41에 적혀 있다.
 - 과거 방향 피처는 같은 experiment_id 안에서 현재 행과 그 이전 행만 쓴다 (미래 행·실험 전체 통계 금지).
 - 입력 금지 컬럼(fg_features.FORBIDDEN): sample_id, experiment_id, relative_time_s, image_path, label,
   indu_t, indu_t.1, meas_t1_plus_t2
@@ -21,24 +22,10 @@ import fg_features as F  # noqa: E402
 
 FORBIDDEN = F.FORBIDDEN
 
-# 묶음 이름 → 컬럼. --features 에 묶음 이름과 컬럼 이름을 섞어 쓸 수 있다.
-GROUPS: dict[str, list[str]] = {
-    'S5': list(F.BASE),                                   # D2의 센서 5개 (meas_a 포함. meas_a는 전 구간 0)
-    'S4': [c for c in F.BASE if c != 'meas_a'],           # meas_a를 뺀 센서 4개
-    'T': ['thermal_t', 'atmp_t'],                         # 온도 2개
-    'C': ['bat_class', 'bat_cc', 'soc_status', 'tr_method'],  # 배터리 조건 4개
-    'GAS': list(F.GAS),                                   # 가스 10종
-    'GASZ': ['gas_all_zero'],                             # 가스 10종이 모두 0인지
-    'G1': list(F.G1_COLS),                                # 과거 방향 피처 6개
-    'G2': list(F.G2_COLS),                                # 사건 이후 경과 시간 2개
-    'G3': list(F.G3_COLS),                                # 사건 발생 여부 2개
-}
-
-
 # ---------------------------------------------------------------------------
-# 새 파생 변수 (센서 조합 실험용 후보)
+# 추가 파생 변수
 # ---------------------------------------------------------------------------
-# 현재 행 값만으로 계산
+# 현재 행 값만으로 계산 (row_features가 만드는 컬럼)
 ROW_COLS = [
     'd_t1_minus_t2',          # meas_t1 - meas_t2
     'd_t1_minus_atmp',        # meas_t1 - atmp_t
@@ -68,20 +55,12 @@ PT2_COLS = ['past_t2_cummax', 'past_t2_drop_from_max', 'past_t2_change_30s']
 PP_COLS = ['past_p_change_from_start', 'past_p_cummax', 'past_p_drop_from_max', 'past_p_change_30s']
 PTH_COLS = ['past_thermal_cummax', 'past_thermal_drop_from_max', 'past_thermal_change_30s']
 PG_COLS = ['past_gas_sum_cummax', 'past_gas_sum_change_30s']
+# meas_t1, meas_v, meas_t2, meas_p, thermal_t, 가스 합의 과거 방향 피처 (new_past_features가 만드는 컬럼)
 NEW_PAST_COLS = PT1_COLS + PV_COLS + PT2_COLS + PP_COLS + PTH_COLS + PG_COLS
-
-GROUPS.update({
-    'R': ROW_COLS,      # 현재 행 차이·합
-    'PT1': PT1_COLS,    # meas_t1 과거 피처 추가분
-    'PV': PV_COLS,      # meas_v 과거 피처 추가분
-    'PT2': PT2_COLS,    # meas_t2 과거 피처
-    'PP': PP_COLS,      # meas_p 과거 피처
-    'PTH': PTH_COLS,    # thermal_t 과거 피처
-    'PG': PG_COLS,      # 가스 합 과거 피처
-})
 
 
 def row_features(frame: pd.DataFrame) -> pd.DataFrame:
+    """현재 행 값만으로 계산하는 차이·합 피처(ROW_COLS)."""
     x = pd.DataFrame(F.to_num(frame, ['meas_t1', 'meas_t2', 'atmp_t', 'thermal_t']), columns=['t1', 't2', 'atmp', 'th'], index=frame.index)
     gas = F.to_num(frame, F.GAS)
     return pd.DataFrame({
@@ -114,7 +93,7 @@ def _since_last_record(t: np.ndarray, x: np.ndarray, running: np.ndarray) -> np.
 
 
 def new_past_features(frame: pd.DataFrame) -> pd.DataFrame:
-    """새 과거 방향 피처. 계산 규칙은 fg_features.past_features와 같다(정렬해서 계산, 입력 순서로 반환)."""
+    """센서별 과거 방향 피처(NEW_PAST_COLS). 계산 규칙은 fg_features.past_features와 같다(정렬해서 계산, 입력 순서로 반환)."""
     n = len(frame)
     out = {c: np.full(n, np.nan) for c in NEW_PAST_COLS}
     if n == 0:
@@ -168,7 +147,10 @@ def feature_table(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def self_check(frame: pd.DataFrame, n_experiments: int = 12, seed: int = 0) -> dict:
-    """모든 과거 피처(기존 + 새 피처)가 미래 행을 쓰지 않는지, 입력 행 순서에 무관한지 실제 데이터로 확인한다."""
+    """모든 과거 피처가 미래 행을 쓰지 않는지, 입력 행 순서에 무관한지 실제 데이터로 확인한다.
+
+    학습·추론 경로에서는 부르지 않는다. 피처 계산식을 고친 뒤 직접 불러 확인하는 용도다.
+    """
     rng = np.random.RandomState(seed)
     cols = [c for c in feature_table(frame.head(50)).columns if c.startswith('past_')]
     exps = rng.choice(sorted(frame['experiment_id'].astype(str).unique()), size=min(n_experiments, frame['experiment_id'].nunique()), replace=False)
@@ -192,22 +174,3 @@ def self_check(frame: pd.DataFrame, n_experiments: int = 12, seed: int = 0) -> d
     assert same(got.loc[full.index], full), '행 순서에 따라 값이 달라짐'
     return {'past_features_checked': len(cols), 'experiments_checked': int(len(exps)), 'truncation_cuts_checked': cuts,
             'order_invariant': True}
-
-
-def resolve(spec: str | list[str], table_columns) -> list[str]:
-    """'S4,T,C,G1' 같은 지정을 컬럼 목록으로 바꾼다. 순서를 유지하고 중복은 한 번만 넣는다."""
-    items = [s.strip() for s in spec.split(',')] if isinstance(spec, str) else list(spec)
-    cols: list[str] = []
-    for it in items:
-        if not it or it == 'none':
-            continue
-        for c in GROUPS.get(it, [it]):
-            if c not in cols:
-                cols.append(c)
-    unknown = [c for c in cols if c not in set(table_columns)]
-    if unknown:
-        raise KeyError(f'없는 피처 또는 묶음: {unknown}')
-    bad = set(cols) & FORBIDDEN
-    if bad:
-        raise ValueError(f'입력 금지 컬럼: {sorted(bad)}')
-    return cols
