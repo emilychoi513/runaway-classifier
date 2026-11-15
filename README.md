@@ -16,7 +16,7 @@
 | 파일 | 역할 |
 |---|---|
 | `model.py` | 피처 표 구성, 모델 설정, 확률 결합, 추론 함수. `train.py`와 `test.py`가 함께 씁니다 |
-| `train.py` | Train으로 학습하고 Validation으로 평가, 가중치 저장. `--refit_train_val`을 주면 Train+Validation으로 학습 |
+| `train.py` | 제출 가중치 학습(Train+Validation → `weights/`). `--train_only`를 주면 Train만 학습하고 Validation으로 평가(`weights_train/`에 저장) |
 | `test.py` | 입력 CSV에 들어 있는 행만으로 추론하고 제출 파일 생성 |
 | `weights/` | 학습된 가중치(CatBoost 모델 9개)와 `meta.json`. 재학습 없이 `test.py`만으로 결과를 재현합니다 |
 | `src/fg_features.py`, `src/features.py` | 표 피처: 센서·조건·가스 값과 과거 방향 피처 |
@@ -37,11 +37,11 @@ python test.py --input <battery_data_light 경로>/test/test.csv \
                --image_root <battery_data_light 경로>/test \
                --output submission.csv
 
-# 학습: Train만 학습하고 Validation 점수 확인
-python train.py --data_dir <battery_data_light 경로> --model_out weights_train
+# 학습: 제출 가중치 재현 (Train+Validation 학습 → weights/ 에 저장. CPU로 2분 안팎)
+python train.py --data_dir <battery_data_light 경로>
 
-# 학습: Train+Validation으로 최종 학습 (weights/ 를 다시 만들 때)
-python train.py --data_dir <battery_data_light 경로> --model_out weights --refit_train_val
+# 검증: Train만 학습하고 Validation 점수 확인 (weights_train/ 에 저장. 제출 가중치는 그대로 둠)
+python train.py --data_dir <battery_data_light 경로> --train_only
 
 # 제출 전 점검
 python check_submission.py --data_dir <battery_data_light 경로> --final submission_stage10_min4.csv
@@ -49,6 +49,8 @@ python check_submission.py --data_dir <battery_data_light 경로> --final submis
 - `--image_root`에는 `test` 폴더(CSV의 `image_path`가 가리키는 `images/` 폴더의 상위 폴더)를 줍니다. `test/images`처럼 이미지 폴더 자체를 줘도 같은 이미지를 찾아 같은 결과가 나옵니다. 이미지를 하나도 찾지 못하면 오류를 냅니다.
 - 출력 행 순서는 입력 CSV 순서입니다. `--sample_submission <battery_data_light 경로>/sample_submission.csv`를 주면 그 양식의 순서로 저장합니다(예측은 같음).
 - `train.py`에 `--cache_dir <폴더>`를 주면 이미지 피처를 저장해 두고 다시 씁니다.
+- 재학습 재현: 위 학습 명령으로 `weights/`를 다시 만든 뒤 `test.py`를 실행하면 최종 선택 파일과 같은 예측이 나옵니다. 시드를 고정했고 CPU로만 학습하므로 스레드 수(`--threads`)를 바꿔도 예측 확률이 같습니다. 모델 파일(`.cbm`)의 바이트와 sha256은 저장할 때마다 달라집니다.
+- `--refit_train_val`은 기본 동작과 같습니다(이전 명령과의 호환용).
 
 ## 모델 구조
 | 구성 | 내용 |
@@ -78,7 +80,7 @@ python check_submission.py --data_dir <battery_data_light 경로> --final submis
 | Train만 학습 → Validation, `E_e5bcddc7` 제외 | 0.9110 | 0.9305 | 0.9320 | 0.9349 | 0.9349 |
 | 97개 실험 5-fold, Test와 같은 조건 구성으로 채점 | — | 0.9288 | 0.9338 | 0.9343 | 0.9350 |
 
-5-fold 행은 이 폴더의 코드로 A·B·C를 fold마다 다시 학습해 낸 값입니다(이전 README의 5-fold 값 0.9369는 A의 fold 밖 예측을 다른 설정으로 만든 값이라 같은 줄에 놓고 비교할 수 없습니다).
+Validation 두 행은 `python train.py --train_only`가 출력하는 값입니다. 5-fold 행은 이 폴더의 피처·모델 코드를 불러 쓰는 별도 분석 스크립트로 A·B·C를 fold마다 다시 학습해 낸 값입니다. 그 스크립트는 실험 단위 fold 배정 파일이 필요해 레포에 넣지 않았습니다(이전 README의 5-fold 값 0.9369는 A의 fold 밖 예측을 다른 설정으로 만든 값이라 같은 줄에 놓고 비교할 수 없습니다).
 
 6단계 제약 검증: 5-fold에서 기반 모델 4가지 모두 +0.0006, 바뀐 42행 중 28행이 맞게 바뀜(모두 6 → 5단계), 좋아진 실험 13개·나빠진 실험 7개(각 1~2행),
 fold 5개 모두 0 이상. Validation에서는 바뀐 8행 중 7행이 맞음. 이전 최댓값에 0.5℃ 이상 여유를 두면 더 나빠져서 여유 없이 씁니다.
@@ -114,12 +116,15 @@ Validation 전체 점수가 낮은 것은 `E_e5bcddc7`(1,543행) 하나에서 �
 |---|---|
 | `check_submission.py --final submission_stage10_min4.csv`: 형식, 같은 입력 재실행, 최종 파일 재현, 행 순서 섞기, 실험 나눠 넣기, 미래 행 빼고 넣기 | 모두 통과 (다른 예측 0행) |
 | `check_submission.py`: 모든 이미지를 검은 이미지로 교체 | 예측이 바뀜 (3,451행 중 0.55%) |
+| 새로 받은 레포에서 `python train.py --data_dir …`로 다시 학습한 뒤 `test.py` 실행 (이미지 캐시 없이, 스레드 6·16) | 최종 선택 파일과 바이트 단위로 동일. 예측 확률도 저장된 가중치와 완전히 같음 |
+| 미래 행 빼고 넣기를 앞 15·35·80·97%로 바꿔 실행, 실험을 하나씩 따로 실행 | 다른 예측 0행 |
+| 빈 이미지를 흰색·회색·다른 크기·흑백 모드로 바꿔 실행 | 모두 예측이 바뀜 (3,451행 중 0.23~0.55%) |
 | `--image_root`에 `test` / `test/images`를 줌 | 두 경우 모두 최종 선택 파일과 바이트 단위로 동일 |
 | `--image_root`에 이미지가 없는 폴더를 줌 | 예측하지 않고 오류를 냄 (이미지 피처가 빈 값인 채로 조용히 예측하지 않음) |
 | `weights/meta.json`의 `use_stage4_min`을 `false`로 바꾸고 `test.py` 실행 | `submission_stage8_peak_guard_trainval.csv`(0.9645)와 바이트 단위로 동일 |
 | 0.9645 제출 파일과 비교 | 4행만 다름, 모두 5 → 4단계 (4.8Ah 실험 2개) |
 
-가중치는 0.9555·0.9645 제출 때와 같은 파일입니다(sha256 동일). 그때 `train.py --refit_train_val`로 다시 학습한 가중치도 규칙 1·2 적용 후 3,451행 모두 같은 예측을 냈고, 6단계 제약과 4단계 최소 지속 제약은 그 예측에만 적용되므로 재학습 재현은 이 버전에서도 그대로 성립합니다.
+가중치는 0.9555·0.9645 제출 때와 같은 파일입니다(sha256 동일). 규칙과 제약은 학습하는 값이 없어, 가중치를 다시 학습해도 위 표처럼 같은 예측이 나옵니다.
 
 ## 참고: 규칙 켜고 끄기 (`weights/meta.json`)
 - `"use_stage4_min": false` → 4단계 최소 지속 제약을 끕니다. 출력이 0.9645 제출 파일과 같아집니다.

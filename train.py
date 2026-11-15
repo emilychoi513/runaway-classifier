@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 """학습 스크립트: 모델 A·B·C를 학습해 가중치 폴더에 저장한다.
 
-예) python train.py --data_dir <battery_data_light> --model_out weights_train               # Train만 학습, Validation 점수 확인
-    python train.py --data_dir <battery_data_light> --model_out weights --refit_train_val   # Train+Validation 학습 (제출용 가중치)
+예) python train.py --data_dir <battery_data_light>                # 제출 가중치 재현: Train+Validation 학습 → weights/
+    python train.py --data_dir <battery_data_light> --train_only   # 검증용: Train만 학습 → weights_train/, Validation 점수 출력
 
-- 기본: Train으로만 학습하고 Validation(학습·선택에 쓰지 않음)으로 채점한다.
-- --refit_train_val: Train+Validation으로 학습한다. Validation 실험 E_e5bcddc7 하나는 넣지 않는다(이유는 model.py의 EXCLUDE).
-  이때 출력되는 Validation 점수는 학습 데이터 점수라서 성능 추정치가 아니다.
+- 기본: 제출에 쓴 구성 그대로 Train+Validation으로 학습해 weights/ 에 저장한다. Validation 실험 E_e5bcddc7 하나는 넣지 않는다(이유는 model.py의 EXCLUDE).
+  이때 출력되는 Validation 점수는 학습 데이터 점수라서 성능 추정치가 아니다. (--refit_train_val 은 같은 동작이며 이전 명령과의 호환용으로 남겨 두었다)
+- --train_only: Train으로만 학습하고 Validation(학습·선택에 쓰지 않음)으로 채점한다. weights_train/ 에 저장하므로 제출 가중치를 덮어쓰지 않는다.
+- 시드가 고정돼 있고 CPU로만 학습하므로, requirements.txt의 버전에서 다시 학습하면 같은 예측이 나온다(스레드 수와 무관).
+  모델 파일(.cbm)의 바이트는 저장할 때마다 달라질 수 있지만 예측 확률은 같다.
 - 세 모델 모두 원본 행 + 평균 12초 간격(10·15초)으로 솎은 복사본으로 학습한다. 복사본의 과거 방향 피처는 솎은 행만으로 다시 계산한다.
 - 규칙(src/rules.py)에는 학습하는 값이 없다. --no_rule1 / --no_peak_guard / --no_stage4_min 을 주면 규칙 1 / 6단계 제약 / 4단계 최소 지속 제약을 끈 설정으로 저장한다.
 - Test는 읽지 않는다.
@@ -51,16 +53,24 @@ def sha256(path: Path) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--data_dir', type=Path, required=True, help='train/, validation/ 폴더가 있는 battery_data_light 경로')
-    ap.add_argument('--model_out', type=Path, default=M.ROOT / 'weights', help='가중치를 저장할 폴더')
-    ap.add_argument('--refit_train_val', action='store_true', help='Train+Validation으로 학습 (제출용)')
+    ap.add_argument('--data_dir', type=Path, default=Path('data/battery_data_light'),
+                    help='train/, validation/ 폴더가 있는 battery_data_light 경로 (기본: data/battery_data_light)')
+    ap.add_argument('--model_out', type=Path, default=None, help='가중치를 저장할 폴더 (기본: weights, --train_only면 weights_train)')
+    ap.add_argument('--train_only', action='store_true',
+                    help='Train만 학습하고 Validation(학습에 쓰지 않음)으로 채점. 기본 저장 폴더가 weights_train이라 제출 가중치를 덮어쓰지 않음')
+    ap.add_argument('--refit_train_val', action='store_true', help='Train+Validation으로 학습 (기본 동작과 같음. 이전 명령과의 호환용)')
     ap.add_argument('--no_rule1', action='store_true', help='규칙 1(전압 급락 → 4단계 이상)을 끈 설정으로 저장')
     ap.add_argument('--no_peak_guard', action='store_true', help='6단계 제약(온도 합 최고치 갱신 중이면 6단계 아님)을 끈 설정으로 저장')
     ap.add_argument('--no_stage4_min', action='store_true', help='4단계 최소 지속 제약(소형 전지: 4단계 시작 뒤 25초 안에는 5단계 아님)을 끈 설정으로 저장')
     ap.add_argument('--cache_dir', type=Path, default=None, help='이미지 현재 행 피처를 저장·재사용할 폴더 (없으면 매번 이미지에서 계산)')
     ap.add_argument('--threads', type=int, default=6)
     args = ap.parse_args()
-    out = args.model_out
+    if args.train_only and args.refit_train_val:
+        ap.error('--train_only 와 --refit_train_val 은 함께 쓸 수 없습니다.')
+    if not (args.data_dir / 'train' / 'train.csv').is_file():
+        ap.error(f'{args.data_dir}/train/train.csv 가 없습니다. --data_dir 에 battery_data_light 경로를 주세요.')
+    refit = not args.train_only   # 기본: 제출 구성(Train+Validation)
+    out = args.model_out if args.model_out is not None else M.ROOT / ('weights' if refit else 'weights_train')
     out.mkdir(parents=True, exist_ok=True)
     use_rule1, use_peak_guard, use_stage4_min = not args.no_rule1, not args.no_peak_guard, not args.no_stage4_min
 
@@ -68,7 +78,7 @@ def main() -> None:
     val, t_val = load_split(args.data_dir, 'validation', args.cache_dir)
     assert not (set(train['experiment_id']) & set(val['experiment_id']))
     parts = [(train, t_train)]
-    if args.refit_train_val:
+    if refit:
         keep = ~val['experiment_id'].isin(M.EXCLUDE).to_numpy()
         assert (~keep).sum() > 0
         parts.append((val[keep].reset_index(drop=True), t_val[keep].reset_index(drop=True)))
@@ -111,7 +121,7 @@ def main() -> None:
               'A_B_C_rules': {**score(pred), 'accuracy': float(accuracy_score(y_val, pred)), 'rows_changed_by_rules': int((pred != pred_abc).sum()),
                               'per_class_f1': f1_score(y_val, pred, labels=M.LABELS, average=None, zero_division=0).tolist(),
                               'confusion': confusion_matrix(y_val, pred, labels=M.LABELS).tolist()}}
-    in_sample = args.refit_train_val
+    in_sample = refit
     meta = {
         'name': 'team2_final', 'data': 'train+validation' if in_sample else 'train', 'labels': M.LABELS, 'seeds': M.SEEDS,
         'A_columns': M.A_COLS, 'B_columns': M.B_COLS, 'C_columns': M.C_COLS,
