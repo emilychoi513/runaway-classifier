@@ -8,7 +8,7 @@
 - --refit_train_val: Train+Validation으로 학습한다. Validation 실험 E_e5bcddc7 하나는 넣지 않는다(이유는 model.py의 EXCLUDE).
   이때 출력되는 Validation 점수는 학습 데이터 점수라서 성능 추정치가 아니다.
 - 세 모델 모두 원본 행 + 평균 12초 간격(10·15초)으로 솎은 복사본으로 학습한다. 복사본의 과거 방향 피처는 솎은 행만으로 다시 계산한다.
-- 규칙(src/rules.py)에는 학습하는 값이 없다. --no_rule1 / --no_peak_guard 를 주면 규칙 1 / 6단계 제약을 끈 설정으로 저장한다.
+- 규칙(src/rules.py)에는 학습하는 값이 없다. --no_rule1 / --no_peak_guard / --no_stage4_min 을 주면 규칙 1 / 6단계 제약 / 4단계 최소 지속 제약을 끈 설정으로 저장한다.
 - Test는 읽지 않는다.
 
 출력: <model_out>/A_s<시드>.cbm, B_s<시드>.cbm, C_s<시드>.cbm, meta.json (+ Train만 학습했을 때 val_pred.csv)
@@ -56,12 +56,13 @@ def main() -> None:
     ap.add_argument('--refit_train_val', action='store_true', help='Train+Validation으로 학습 (제출용)')
     ap.add_argument('--no_rule1', action='store_true', help='규칙 1(전압 급락 → 4단계 이상)을 끈 설정으로 저장')
     ap.add_argument('--no_peak_guard', action='store_true', help='6단계 제약(온도 합 최고치 갱신 중이면 6단계 아님)을 끈 설정으로 저장')
+    ap.add_argument('--no_stage4_min', action='store_true', help='4단계 최소 지속 제약(소형 전지: 4단계 시작 뒤 25초 안에는 5단계 아님)을 끈 설정으로 저장')
     ap.add_argument('--cache_dir', type=Path, default=None, help='이미지 현재 행 피처를 저장·재사용할 폴더 (없으면 매번 이미지에서 계산)')
     ap.add_argument('--threads', type=int, default=6)
     args = ap.parse_args()
     out = args.model_out
     out.mkdir(parents=True, exist_ok=True)
-    use_rule1, use_peak_guard = not args.no_rule1, not args.no_peak_guard
+    use_rule1, use_peak_guard, use_stage4_min = not args.no_rule1, not args.no_peak_guard, not args.no_stage4_min
 
     train, t_train = load_split(args.data_dir, 'train', args.cache_dir)
     val, t_val = load_split(args.data_dir, 'validation', args.cache_dir)
@@ -103,7 +104,7 @@ def main() -> None:
     L = np.asarray(M.LABELS)
     pred_a = L[pa.argmax(1)]
     pred_abc = L[M.compose(pa, r3, r6).argmax(1)]
-    pred = M.rules.apply(val, pred_abc, use_rule1=use_rule1, use_peak_guard=use_peak_guard)
+    pred = M.rules.apply(val, pred_abc, use_rule1=use_rule1, use_peak_guard=use_peak_guard, use_stage4_min=use_stage4_min)
     odd = val['experiment_id'].isin(M.EXCLUDE).to_numpy()
     score = lambda p: {'macro_f1': M.macro_f1(y_val, p), 'macro_f1_without_excluded': M.macro_f1(y_val[~odd], p[~odd])}   # noqa: E731
     report = {'A_only': score(pred_a), 'A_B_C': score(pred_abc),
@@ -115,7 +116,8 @@ def main() -> None:
         'name': 'team2_final', 'data': 'train+validation' if in_sample else 'train', 'labels': M.LABELS, 'seeds': M.SEEDS,
         'A_columns': M.A_COLS, 'B_columns': M.B_COLS, 'C_columns': M.C_COLS,
         'A_params': M.A_PARAMS, 'B_params': M.B_PARAMS, 'C_params': M.C_PARAMS,
-        'image_feature_version': M.IM.VERSION, 'rules_version': M.rules.VERSION, 'use_rule1': use_rule1, 'use_peak_guard': use_peak_guard, 'models': models,
+        'image_feature_version': M.IM.VERSION, 'rules_version': M.rules.VERSION, 'use_rule1': use_rule1, 'use_peak_guard': use_peak_guard, 'use_stage4_min': use_stage4_min,
+        'models': models,
         'combine': 'A의 2·3단계 확률 합을 B의 3단계 비율로, 5·6단계 확률 합을 C의 6단계 비율로 나눔. 1·4단계는 A 그대로. 시드 평균 후 가장 높은 단계 → 규칙.',
         'augmentation': '모든 실험을 평균 12초 간격(10·15초)으로 솎은 복사본을 원본과 함께 학습',
         'excluded_experiments': M.EXCLUDE if in_sample else [],

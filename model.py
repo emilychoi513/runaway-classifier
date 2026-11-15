@@ -7,7 +7,8 @@ train.py와 test.py가 모두 이 모듈을 쓴다. 피처 계산식은 src/ 아
 - B: 2↔3단계 전용 CatBoost. 표 피처 41개 + 압력 변곡점 피처 48개 (src/pfeat.py).
 - C: 5↔6단계 전용 CatBoost. 표 피처 41개 + 온도 합(meas_t1 + meas_t2) 최고점 피처 15개 (src/sfeat.py).
 - 결합: 1·4단계 확률은 A 그대로. A의 (2단계+3단계) 확률 합을 B의 비율로, (5단계+6단계) 확률 합을 C의 비율로 나눈다.
-- 규칙: 결합한 예측 뒤에 단계 기준 규칙 2개와 6단계 제약을 적용한다 (src/rules.py). 규칙 1과 6단계 제약은 weights/meta.json의 use_rule1·use_peak_guard로 켜고 끈다.
+- 규칙: 결합한 예측 뒤에 단계 기준 규칙 2개, 6단계 제약, 4단계 최소 지속 제약(소형 전지)을 적용한다 (src/rules.py).
+  규칙 1, 6단계 제약, 4단계 최소 지속 제약은 weights/meta.json의 use_rule1·use_peak_guard·use_stage4_min으로 켜고 끈다.
 
 규정 준수
 - 모든 과거 방향 피처와 규칙은 같은 experiment_id 안에서 현재 행과 그 이전 행만 쓴다. 창 길이는 초 단위(relative_time_s 기준)다.
@@ -145,7 +146,8 @@ def predict_from_table(frame: pd.DataFrame, table: pd.DataFrame, model_dir, thre
         r3 += b.predict_proba(xb, thread_count=threads)[:, 1] / len(meta['models'])
         r6 += c.predict_proba(xc, thread_count=threads)[:, 1] / len(meta['models'])
     pred = np.asarray(LABELS)[compose(prob_a, r3, r6).argmax(1)]
-    return rules.apply(frame, pred, use_rule1=bool(meta['use_rule1']), use_peak_guard=bool(meta['use_peak_guard']))
+    return rules.apply(frame, pred, use_rule1=bool(meta['use_rule1']), use_peak_guard=bool(meta['use_peak_guard']),
+                       use_stage4_min=bool(meta.get('use_stage4_min', False)))
 
 
 def predict(frame: pd.DataFrame, image_root, model_dir, threads: int = 4) -> np.ndarray:
