@@ -19,10 +19,10 @@
 | `train.py` | 제출 가중치 학습(Train+Validation → `weights/`). `--train_only`를 주면 Train만 학습하고 Validation으로 평가(`weights_train/`에 저장) |
 | `test.py` | 입력 CSV에 들어 있는 행만으로 추론하고 제출 파일 생성 |
 | `weights/` | 학습된 가중치(CatBoost 모델 9개)와 `meta.json`. 재학습 없이 `test.py`만으로 결과를 재현합니다 |
-| `src/fg_features.py`, `src/features.py` | 표 피처: 센서·조건·가스 값과 과거 방향 피처 |
+| `src/sensor_features.py` | 표 피처: 센서·조건·가스 값과 과거 방향 피처 |
 | `src/image_features.py` | 열화상 이미지 피처 (색을 온도 수준으로 바꾼 통계) |
-| `src/pfeat.py` | 압력 변곡점 피처 48개 (2↔3단계 구분용) |
-| `src/sfeat.py` | 온도 합(`meas_t1 + meas_t2`) 최고점 피처 15개 (5↔6단계 구분용) |
+| `src/pressure_features.py` | 압력 변곡점 피처 48개 (2↔3단계 구분용, 모델 B) |
+| `src/temp_sum_features.py` | 온도 합(`meas_t1 + meas_t2`) 최고점 피처 15개 (5↔6단계 구분용, 모델 C) |
 | `src/rules.py` | 예측 뒤에 적용하는 단계 기준 규칙 2개, 6단계 제약, 4단계 최소 지속 제약 |
 | `check_submission.py` | 대회 템플릿의 제출 전 점검 스크립트 (수정 없음) |
 | `submission_stage10_min4.csv` | 최종 선택 제출 파일 |

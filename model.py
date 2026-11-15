@@ -4,8 +4,8 @@ train.py와 test.py가 모두 이 모듈을 쓴다. 피처 계산식은 src/ 아
 
 구성
 - A: 6단계 CatBoost. 표 피처 41개 + 열화상 이미지 피처 4개.
-- B: 2↔3단계 전용 CatBoost. 표 피처 41개 + 압력 변곡점 피처 48개 (src/pfeat.py).
-- C: 5↔6단계 전용 CatBoost. 표 피처 41개 + 온도 합(meas_t1 + meas_t2) 최고점 피처 15개 (src/sfeat.py).
+- B: 2↔3단계 전용 CatBoost. 표 피처 41개 + 압력 변곡점 피처 48개 (src/pressure_features.py).
+- C: 5↔6단계 전용 CatBoost. 표 피처 41개 + 온도 합(meas_t1 + meas_t2) 최고점 피처 15개 (src/temp_sum_features.py).
 - 결합: 1·4단계 확률은 A 그대로. A의 (2단계+3단계) 확률 합을 B의 비율로, (5단계+6단계) 확률 합을 C의 비율로 나눈다.
 - 규칙: 결합한 예측 뒤에 단계 기준 규칙 2개, 6단계 제약, 4단계 최소 지속 제약(소형 전지)을 적용한다 (src/rules.py).
   규칙 1, 6단계 제약, 4단계 최소 지속 제약은 weights/meta.json의 use_rule1·use_peak_guard·use_stage4_min으로 켜고 끈다.
@@ -30,11 +30,11 @@ from sklearn.metrics import f1_score
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / 'src'))
 
-import features as FT  # noqa: E402  표 피처 (센서·조건·가스·과거 방향)
 import image_features as IM  # noqa: E402  열화상 이미지 피처
-import pfeat  # noqa: E402  압력 변곡점 피처
+import pressure_features  # noqa: E402  압력 변곡점 피처 (모델 B)
 import rules  # noqa: E402  단계 기준 규칙
-import sfeat  # noqa: E402  온도 합 최고점 피처
+import sensor_features  # noqa: E402  표 피처 (센서·조건·가스·과거 방향)
+import temp_sum_features  # noqa: E402  온도 합 최고점 피처 (모델 C)
 
 LABELS = [1, 2, 3, 4, 5, 6]
 SEEDS = [42, 1, 2]
@@ -51,8 +51,8 @@ BASE41 = [
     'past_gas_sum_cummax', 'past_gas_sum_change_30s',
 ]
 A_COLS = BASE41 + IM.IC_COLS
-B_COLS = BASE41 + pfeat.P_COLS
-C_COLS = BASE41 + sfeat.S_COLS
+B_COLS = BASE41 + pressure_features.P_COLS
+C_COLS = BASE41 + temp_sum_features.S_COLS
 
 A_PARAMS = {'loss_function': 'MultiClass', 'learning_rate': 0.05, 'depth': 8, 'task_type': 'CPU', 'nan_mode': 'Min'}
 A_TREES = {42: 247, 1: 273, 2: 260}      # 시드별 트리 수. Train 5-fold의 fold 밖 loss가 가장 낮았던 값
@@ -78,7 +78,7 @@ def build_table(frame: pd.DataFrame, image_root, cache_file=None) -> pd.DataFram
 
     cache_file은 학습 때 이미지 현재 행 피처를 저장·재사용하는 용도다(test.py는 쓰지 않는다).
     """
-    table = pd.concat([IM.full_table(frame, image_root, cache_file=cache_file), pfeat.p_features(frame), sfeat.s_features(frame)], axis=1)
+    table = pd.concat([IM.full_table(frame, image_root, cache_file=cache_file), pressure_features.p_features(frame), temp_sum_features.s_features(frame)], axis=1)
     assert table.columns.is_unique
     return table
 
@@ -99,7 +99,7 @@ def thin_frame(frame: pd.DataFrame) -> pd.DataFrame:
 def thin_table(thin: pd.DataFrame, orig: pd.DataFrame, orig_table: pd.DataFrame) -> pd.DataFrame:
     """[학습 전용] 솎은 행만으로 과거 방향 피처를 다시 계산한 피처 표. 이미지 현재 행 피처는 같은 이미지라 원본 값을 쓴다."""
     ir = orig_table[IM.IR_COLS].set_index(orig['sample_id'].to_numpy()).loc[thin['sample_id'].to_numpy()].reset_index(drop=True)
-    table = pd.concat([FT.feature_table(thin), ir, IM.past_table(thin, ir), pfeat.p_features(thin), sfeat.s_features(thin)], axis=1)
+    table = pd.concat([sensor_features.feature_table(thin), ir, IM.past_table(thin, ir), pressure_features.p_features(thin), temp_sum_features.s_features(thin)], axis=1)
     assert list(table.columns) == list(orig_table.columns)
     return table
 

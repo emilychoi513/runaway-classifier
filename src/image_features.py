@@ -28,7 +28,7 @@ from scipy import ndimage
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-import features as FT  # noqa: E402
+import sensor_features as SF  # noqa: E402
 
 VERSION = 'v1'
 HOT, WHITE = 1.8, 2.2      # level 1.8 = 노랑(색상 60°) 이상, 2.2 = 흰색에 가까움(채도 0.8 미만)
@@ -162,7 +162,7 @@ def past_table(frame: pd.DataFrame, ir: pd.DataFrame) -> pd.DataFrame:
     out = {c: np.full(n, np.nan) for c in IP_COLS}
     if n == 0:
         return pd.DataFrame(out, index=frame.index)
-    t_all = FT.F.to_num(frame, ['relative_time_s'])[:, 0]
+    t_all = SF.to_num(frame, ['relative_time_s'])[:, 0]
     if np.isnan(t_all).any():
         raise ValueError('relative_time_s에 숫자가 아닌 값이 있어 과거 피처를 계산할 수 없습니다.')
     src = ir[['img_level_mean', 'img_frac_hot', 'img_frac_white', 'img_border_level']].to_numpy(dtype=np.float64)
@@ -171,7 +171,7 @@ def past_table(frame: pd.DataFrame, ir: pd.DataFrame) -> pd.DataFrame:
     exp_sorted = exp[order]
     starts = np.flatnonzero(np.r_[True, exp_sorted[1:] != exp_sorted[:-1]])
     ends = np.r_[starts[1:], n]
-    lag = FT.F._lag_value
+    lag = SF._lag_value
     for s, e in zip(starts, ends):
         idx = order[s:e]
         t = t_all[idx]
@@ -195,7 +195,7 @@ def image_table(frame: pd.DataFrame, image_root, cache_file=None, workers: int =
 
 
 def full_table(frame: pd.DataFrame, image_root, cache_file=None, workers: int = 8) -> pd.DataFrame:
-    """표 피처(features.feature_table) + 이미지 피처."""
-    table = pd.concat([FT.feature_table(frame), image_table(frame, image_root, cache_file, workers)], axis=1)
-    assert table.columns.is_unique and not (set(table.columns) & FT.FORBIDDEN)
+    """표 피처(sensor_features.feature_table) + 이미지 피처."""
+    table = pd.concat([SF.feature_table(frame), image_table(frame, image_root, cache_file, workers)], axis=1)
+    assert table.columns.is_unique and not (set(table.columns) & SF.FORBIDDEN)
     return table
