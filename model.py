@@ -1,20 +1,12 @@
-"""Uni-D 배터리 열폭주 6단계 분류 — 2팀 공통 모듈 (피처 생성, 모델 구성, 결합, 규칙).
+"""Uni-D 배터리 열폭주 6단계 분류 — 2팀 공통 모듈 (피처 표, 모델 구성, 결합, 추론).
 
-train.py와 test.py가 모두 이 모듈을 쓴다. 피처 계산식은 src/ 아래에 있다.
+train.py와 test.py가 함께 쓴다. 피처 계산식과 규칙은 src/ 아래에 있다.
 
-구성
-- A: 6단계 CatBoost. 표 피처 41개 + 열화상 이미지 피처 4개.
-- B: 2↔3단계 전용 CatBoost. 표 피처 41개 + 압력 변곡점 피처 48개 (src/pressure_features.py).
-- C: 5↔6단계 전용 CatBoost. 표 피처 41개 + 온도 합(meas_t1 + meas_t2) 최고점 피처 15개 (src/temp_sum_features.py).
-- 결합: 1·4단계 확률은 A 그대로. A의 (2단계+3단계) 확률 합을 B의 비율로, (5단계+6단계) 확률 합을 C의 비율로 나눈다.
-- 규칙: 결합한 예측 뒤에 단계 기준 규칙 2개, 6단계 제약, 4단계 최소 지속 제약(소형 전지)을 적용한다 (src/rules.py).
-  규칙 1, 6단계 제약, 4단계 최소 지속 제약은 weights/meta.json의 use_rule1·use_peak_guard·use_stage4_min으로 켜고 끈다.
-
-규정 준수
-- 모든 과거 방향 피처와 규칙은 같은 experiment_id 안에서 현재 행과 그 이전 행만 쓴다. 창 길이는 초 단위(relative_time_s 기준)다.
-- 실험 전체 통계(전체 평균·최댓값·길이·순위)는 쓰지 않는다. 입력 데이터로 추정하는 전처리(표준화, 결측 대체)도 없다.
-- 입력 금지 컬럼: sample_id, experiment_id, relative_time_s, image_path, label, indu_t, indu_t.1, meas_t1_plus_t2
-  (relative_time_s는 과거 방향 창을 정하는 데만 쓰고 모델 입력으로는 넣지 않는다).
+- A: 6단계 CatBoost. 표 피처 41개 + 이미지 피처 4개.
+- B: 2↔3단계 전용 CatBoost. 표 피처 41개 + 압력 변곡점 피처 48개.
+- C: 5↔6단계 전용 CatBoost. 표 피처 41개 + 온도 합 최고점 피처 15개.
+- 결합: A의 (2+3단계) 확률 합을 B의 비율로, (5+6단계) 확률 합을 C의 비율로 나눈 뒤 src/rules.py의 규칙을 적용한다.
+- 모든 과거 방향 피처와 규칙은 같은 experiment_id의 현재 행과 그 이전 행만 쓴다.
 """
 from __future__ import annotations
 
@@ -61,12 +53,10 @@ B_TREES = 300
 C_PARAMS = dict(B_PARAMS)
 C_TREES = 300
 
-# Train+Validation으로 최종 학습할 때 넣지 않는 Validation 실험.
-# 전압이 0이 되자마자 4단계 없이 5단계가 2,950초 이어지는 실험으로, 용량이 같은 다른 실험들의 4·5단계 기준과 어긋난다.
-# 이 실험을 학습에 넣으면 Train+Validation 5-fold에서 다른 실험의 '4단계를 5단계로' 오류가 70 → 97행으로 늘었다.
+# Train+Validation 학습에서 빼는 Validation 실험. 다른 실험들의 4·5단계 기준과 어긋난다 (README 참고)
 EXCLUDE = ['E_e5bcddc7d77f459ea541cf658ab4346e']
 
-# 간격 증강: 원본(5초 간격)에 더해 평균 12초 간격(10·15초)으로 솎은 복사본을 함께 학습한다. Test 일부 실험의 간격이 넓기 때문이다.
+# 간격 증강: 평균 12초 간격(10·15초)으로 솎은 복사본을 원본과 함께 학습한다
 THIN_AVG_GAP_S, THIN_STEP_S = 12.0, 5.0
 
 
@@ -74,10 +64,7 @@ THIN_AVG_GAP_S, THIN_STEP_S = 12.0, 5.0
 # 피처 표
 # ---------------------------------------------------------------------------
 def build_table(frame: pd.DataFrame, image_root, cache_file=None) -> pd.DataFrame:
-    """frame에 들어 있는 행만으로 모든 피처를 만든다. 행 순서는 입력과 같다.
-
-    cache_file은 학습 때 이미지 현재 행 피처를 저장·재사용하는 용도다(test.py는 쓰지 않는다).
-    """
+    """frame에 들어 있는 행만으로 모든 피처를 만든다(행 순서 유지). cache_file은 학습 때만 쓴다."""
     table = pd.concat([IM.full_table(frame, image_root, cache_file=cache_file), pressure_features.p_features(frame), temp_sum_features.s_features(frame)], axis=1)
     assert table.columns.is_unique
     return table

@@ -1,19 +1,9 @@
-"""표 피처(센서·조건·가스 값과 과거 방향 피처).
+"""표 피처: 센서·조건·가스 값과 과거 방향 피처.
 
-두 부분으로 되어 있다.
-- 기본 피처: 센서·조건·온도·가스 원값, gas_all_zero, meas_t1·meas_v의 과거 방향 피처 10개 (base_table).
-- 추가 피처: 현재 행 값의 차이·합, 센서별 과거 방향 피처 24개 (extra_row_features, extra_past_features).
-feature_table이 둘을 이어 붙인 전체 표를 만든다. 여기서 만든 컬럼을 모두 모델에 넣지는 않는다.
-최종 모델이 쓰는 41개는 model.py의 BASE41에 적혀 있다.
-
-규칙
-- 현재 행 피처는 행 하나의 값만 쓴다.
-- 과거 방향 피처는 같은 experiment_id 안에서 relative_time_s 기준으로 "현재 행과 그 이전 행"만 쓴다.
-  미래 행과 실험 전체 통계(최종 최댓값, 평균 등)는 쓰지 않는다.
-- 결측·무한값: 숫자로 바꿀 수 없는 값 → NaN, ±inf → NaN. NaN은 그대로 CatBoost(nan_mode=Min)에 넘긴다.
-- 계산할 수 없는 과거 피처(이전 행 부족, 사건 미발생)는 NaN으로 둔다.
-- 입력 행 순서와 무관하게 같은 값이 나오도록 내부에서 정렬해 계산하고, 결과는 입력 순서로 돌려준다.
-- 입력 금지 컬럼(FORBIDDEN): sample_id, experiment_id, relative_time_s, image_path, label, indu_t, indu_t.1, meas_t1_plus_t2
+- 기본 피처(base_table)와 추가 피처(extra_row_features, extra_past_features)를 feature_table이 이어 붙인다.
+- 최종 모델이 쓰는 41개는 model.py의 BASE41에 적혀 있다.
+- 과거 방향 피처는 같은 experiment_id의 현재 행과 그 이전 행만 쓴다. 계산할 수 없으면 NaN으로 둔다.
+- 입력 행 순서와 무관하게 같은 값이 나온다(내부에서 정렬해 계산하고 입력 순서로 돌려준다).
 """
 from __future__ import annotations
 
@@ -23,7 +13,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # 기본 피처
 # ---------------------------------------------------------------------------
-# 센서 5개. 과거 방향 피처의 재료로 쓰고, 원값 그대로는 최종 모델 입력(model.py의 BASE41)에 넣지 않는다
+# 센서 5개 (원값은 모델 입력에 넣지 않고 과거 방향 피처의 재료로 쓴다)
 BASE = ['meas_v', 'meas_a', 'meas_t1', 'meas_t2', 'meas_p']
 
 # F1: 조건·온도 컬럼 (현재 행 값 그대로, 숫자로 넣음)
@@ -279,10 +269,7 @@ def feature_table(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def self_check(frame: pd.DataFrame, n_experiments: int = 12, seed: int = 0) -> dict:
-    """모든 과거 피처가 미래 행을 쓰지 않는지, 입력 행 순서에 무관한지 실제 데이터로 확인한다.
-
-    학습·추론 경로에서는 부르지 않는다. 피처 계산식을 고친 뒤 직접 불러 확인하는 용도다.
-    """
+    """과거 피처가 미래 행을 쓰지 않는지, 입력 행 순서에 무관한지 확인한다(학습·추론에서는 부르지 않는다)."""
     rng = np.random.RandomState(seed)
     cols = [c for c in feature_table(frame.head(50)).columns if c.startswith('past_')]
     exps = rng.choice(sorted(frame['experiment_id'].astype(str).unique()), size=min(n_experiments, frame['experiment_id'].nunique()), replace=False)

@@ -1,15 +1,10 @@
 #!/usr/bin/env python
 """추론 스크립트: 입력 CSV → 제출 형식 CSV(sample_id,label).
 
-예) python test.py --input <battery_data_light>/test/test.csv \\
-                   --image_root <battery_data_light>/test \\
-                   --model weights --output submission.csv \\
-                   [--sample_submission <battery_data_light>/sample_submission.csv]
+예) python test.py --input <battery_data_light>/test/test.csv --image_root <battery_data_light>/test --output submission.csv
 
-- weights/ 에 저장된 모델만 불러 쓴다. 재학습, 인터넷 접속, 입력 데이터로 통계를 추정하는 일이 없다.
-- 입력 CSV에 들어 있는 행만으로 피처를 만든다. 과거 방향 피처와 규칙은 같은 experiment_id의 현재 행과 그 이전 행만 쓴다.
-  각 행의 예측은 같은 실험의 이후 행, 다른 실험, 입력 행 순서와 무관하다.
-- 이미지는 --image_root 아래에서 매번 새로 읽는다(캐시 없음).
+- weights/ 의 모델만 불러 쓴다(재학습 없음). 입력 CSV에 들어 있는 행만으로 피처를 만든다.
+- 각 행의 예측은 같은 실험의 이후 행, 다른 실험, 입력 행 순서와 무관하다.
 - 출력 행 순서는 입력 CSV 그대로다. --sample_submission 을 주면 그 양식의 순서로 저장한다.
 """
 from __future__ import annotations

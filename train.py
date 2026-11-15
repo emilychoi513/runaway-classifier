@@ -1,19 +1,12 @@
 #!/usr/bin/env python
-"""학습 스크립트: 모델 A·B·C를 학습해 가중치 폴더에 저장한다.
+"""학습 스크립트: 모델 A·B·C를 학습해 가중치 폴더에 저장한다. Test는 읽지 않는다.
 
 예) python train.py --data_dir <battery_data_light>                # 제출 가중치 재현: Train+Validation 학습 → weights/
     python train.py --data_dir <battery_data_light> --train_only   # 검증용: Train만 학습 → weights_train/, Validation 점수 출력
 
-- 기본: 제출에 쓴 구성 그대로 Train+Validation으로 학습해 weights/ 에 저장한다. Validation 실험 E_e5bcddc7 하나는 넣지 않는다(이유는 model.py의 EXCLUDE).
-  이때 출력되는 Validation 점수는 학습 데이터 점수라서 성능 추정치가 아니다. (--refit_train_val 은 같은 동작이며 이전 명령과의 호환용으로 남겨 두었다)
-- --train_only: Train으로만 학습하고 Validation(학습·선택에 쓰지 않음)으로 채점한다. weights_train/ 에 저장하므로 제출 가중치를 덮어쓰지 않는다.
-- 시드가 고정돼 있고 CPU로만 학습하므로, requirements.txt의 버전에서 다시 학습하면 같은 예측이 나온다(스레드 수와 무관).
-  모델 파일(.cbm)의 바이트는 저장할 때마다 달라질 수 있지만 예측 확률은 같다.
-- 세 모델 모두 원본 행 + 평균 12초 간격(10·15초)으로 솎은 복사본으로 학습한다. 복사본의 과거 방향 피처는 솎은 행만으로 다시 계산한다.
-- 규칙(src/rules.py)에는 학습하는 값이 없다. --no_rule1 / --no_peak_guard / --no_stage4_min 을 주면 규칙 1 / 6단계 제약 / 4단계 최소 지속 제약을 끈 설정으로 저장한다.
-- Test는 읽지 않는다.
-
-출력: <model_out>/A_s<시드>.cbm, B_s<시드>.cbm, C_s<시드>.cbm, meta.json (+ Train만 학습했을 때 val_pred.csv)
+- 기본 실행은 제출에 쓴 구성 그대로다. 시드를 고정했고 CPU로만 학습하므로 다시 학습해도 같은 예측이 나온다.
+- 세 모델 모두 원본 행과 평균 12초 간격으로 솎은 복사본으로 학습한다.
+- --no_rule1 / --no_peak_guard / --no_stage4_min 은 해당 규칙을 끈 설정으로 저장한다.
 """
 from __future__ import annotations
 
