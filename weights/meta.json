@@ -305,5 +305,5 @@
  },
  "validation_note": "Validation이 학습에 들어가 있으므로 아래 Validation 점수는 성능 추정치가 아니다(학습 데이터 점수).",
  "created": "2026-11-14 17:11:43",
- "note": "리더보드에 제출한 submission_stage6_rules_trainval.csv를 만든 가중치 그대로다 (2026-11-14 17:11 학습, 파일 sha256 위와 같음). | 2026-11-15 stage8_peak_guard: 가중치는 그대로 두고 6단계 제약(온도 합 최고치 갱신 중이면 6단계 아님, src/rules.py)을 추가함 (rules_version v1 → v2, use_peak_guard true). use_peak_guard를 false로 바꾸면 submission_stage6_rules_trainval.csv와 같은 출력. | 2026-11-15 stage10_min4: 가중치는 그대로 두고 4단계 최소 지속 제약(소형 전지에서 4단계 시작 뒤 25초 안에는 5·6단계 아님, src/rules.py)을 추가함 (rules_version v2 → v3, use_stage4_min true). use_stage4_min을 false로 바꾸면 submission_stage8_peak_guard_trainval.csv와 같은 출력."
+ "note": "가중치(A·B·C 9개)는 Train+Validation으로 학습한 뒤 바꾸지 않았다(파일별 sha256은 models 항목에 있다). 규칙 1·2, 6단계 제약, 4단계 최소 지속 제약은 학습하는 값이 없는 후처리라 가중치와 무관하다(src/rules.py). 최종 제출 파일 submission.csv는 use_rule1, use_peak_guard, use_stage4_min이 모두 true일 때의 출력이다."
 }
